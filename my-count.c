@@ -9,6 +9,7 @@
 
 #define MAX_N 10000  // Adjust as needed
 
+//Test
 // Shared memory structure
 typedef struct {
     int n;
