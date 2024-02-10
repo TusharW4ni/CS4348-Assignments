@@ -9,10 +9,16 @@
 
 #define MAX_N 10000  // Adjust as needed
 
-//Test
-// Shared memory structure
+
+/*Shared memory structure
+n = # of Elements
+m = # of Processors
+A - input Array
+B - output Array
+X - intermediate Array
+*/ 
 typedef struct {
-    int n;
+    int n; 
     int m;
     int* A;
     int* B;
@@ -43,16 +49,17 @@ void waitBarrier(Barrier* barrier) {
 }
 
 // Worker function
-void worker(int id, SharedData* shared, Barrier* barrier) {
+void worker(int begin, int end, SharedData* shared, Barrier* barrier) {
     int n = shared->n;
     int m = shared->m;
     int* A = shared->A;
     int* B = shared->B;
     int* X = shared->X;
 
-    for (int i = 0; i < log2(n); i++) {
-        for (int j = 0; j < n; j++) {
-            if (j < pow(2, i)) {
+    for (int i = 0; i < floor(log2(n)); i++) {
+        for (int j = begin; begin < end; j++) {
+            if (j - pow(2, i) < 0) //The case where it does not have a left neighbor
+            {
                 X[j] = B[j];
             } else {
                 X[j] = B[j] + B[j - (int)pow(2, i)];
@@ -98,8 +105,8 @@ int main(int argc, char* argv[]) {
       fprintf(stderr, "m can't be less than n\n");
       return 1;
     } 
+    // We need to Validate n== # of elements in file
 
-   
 
     //Shared memory initialization
     //SharedData* shared = mmap(NULL, sizeof(SharedData), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
@@ -130,11 +137,24 @@ int main(int argc, char* argv[]) {
     Barrier barrier;
     initBarrier(&barrier, m);
 
+    int problemSize = n/m;
+
     for (int i = 0; i < m; i++) {
         pid = fork();
-        if (pid == 0) {
-            // Child process
-            worker(i, shared, &barrier);
+        if (pid == 0) // Child processes
+        {
+            /*
+            (i*problemSize) = beggining of sub problem for process m
+            (i*problemSize+problemSize) = end of sub problem for process m
+            */
+            if(i+1==m) //Last Child Process recieves all extra elements in the case of unequal division of n/m
+                {
+                    worker((i*problemSize), n , shared, &barrier);
+                }
+                else
+                {
+                    worker((i*problemSize), (i*problemSize+problemSize) , shared, &barrier);
+                }
             exit(0);
         }
     }
