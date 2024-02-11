@@ -95,22 +95,24 @@ int main(int argc, char* argv[]) {
         perror("Error opening input file");
         return 1;
     }
+    //Get File Descriptor from input File
+    int inputFD = fileno(inputFilePtr);
 
     //SharedData* shared = mmap(NULL, sizeof(SharedData), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
 
     //Shared memory initialization
-    int* shared_n = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, *inputFilePtr , 0);
-    int* shared_m = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, *inputFilePtr , 0);
-    int* A = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, *inputFilePtr , 0);
-    int* B = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, *inputFilePtr , 0);
-    int* X = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, *inputFilePtr , 0);
-    int* Barrier = mmap(NULL, m*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, *inputFilePtr , 0);
-    
+    int* shared_n = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFD , 0);
+    int* shared_m = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFD , 0);
+    int* A = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFD , 0);
+    int* B = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFD , 0);
+    int* X = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFD , 0);
+    int* Barrier = mmap(NULL, m*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFD , 0);
+
     //int* processId = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFilePtr , 0);
 
     //Initiialize Shared Memory
-    shared_n = n;
-    shared_m = m;
+    *shared_n = n;
+    *shared_m = m;
     initBarrier(Barrier, n);
 
     //Read in A.txt to shared A array
