@@ -146,21 +146,23 @@ int main(int argc, char* argv[]) {
                 }
             exit(0);
         }
-        else { wait(NULL);}
     }
+
+    // Wait for all child processes to finish
+    while (wait(NULL) > 0);
 
     // Update B array
         for (int j = 0; j < n; j++) {
             B[j] = X[j];
         }
 
-    // Wait for all child processes to finish
-    while (wait(NULL) > 0);
+    //Write B to B.txt
+
 
     // Clean up and release resources
-    free(shared->A);
-    free(shared->B);
-    free(shared->X);
+    free(A); //Use munmap instead
+    free(B);
+    free(X);
     munmap(shared, sizeof(SharedData));
 
     return 0;
