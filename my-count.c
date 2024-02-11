@@ -17,26 +17,18 @@ A - input Array
 B - output Array
 X - intermediate Array
 */ 
-typedef struct {
-    int n; 
-    int m;
-    int* A;
-    int* B;
-    int* X;
-} SharedData;
 
-// Barrier implementation
-typedef struct {
-    int count;
-    int n;
-} Barrier;
 
-void initBarrier(Barrier* barrier, int n) {
-    barrier->count = 0;
-    barrier->n = n;
+void initBarrier( int* Barrier) 
+{
+    for(int i=0; i< (sizeof(Barrier)/sizeof(int)); i++)
+    {
+        Barrier[i]=-1;
+    }
+    
 }
 
-void waitBarrier(Barrier* barrier) {
+void waitBarrier(int* barrier) {
     barrier->count++;
 
     if (barrier->count == barrier->n) {
@@ -49,7 +41,7 @@ void waitBarrier(Barrier* barrier) {
 }
 
 // Worker function
-void worker(int id, int begin, int end, SharedData* shared, Barrier* barrier) {
+void worker(int id, int begin, int end) {
     int n = shared->n;
     int m = shared->m;
     int* A = shared->A;
@@ -106,57 +98,55 @@ int main(int argc, char* argv[]) {
     } 
     // We need to Validate n== # of elements in file
 
-
-    //Shared memory initialization
-    //SharedData* shared = mmap(NULL, sizeof(SharedData), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
-    int fd = shm_open("/my_shared_memory", O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
-    ftruncate(fd, sizeof(SharedData));
-    SharedData* shared = mmap(NULL, sizeof(SharedData), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    shared->n = n;
-    shared->m = m;
-    shared->A = malloc(n * sizeof(int));
-    shared->B = malloc(n * sizeof(int));
-    shared->X = malloc(n * sizeof(int));
-
-    //Barrier Needs to be Shared as well so children can write to it
-    Barrier barrier;
-    initBarrier(&barrier, m);
-
-    // Read input array from file
+     // Read input array from file
     FILE* inputFilePtr = fopen(inputFile, "r");
     if (inputFilePtr == NULL) {
         perror("Error opening input file");
         return 1;
     }
 
-    for (int i = 0; i < n; i++) {
-        fscanf(inputFilePtr, "%d", &shared->A[i]);
-    }
+    //SharedData* shared = mmap(NULL, sizeof(SharedData), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
 
+    //Shared memory initialization
+    int* A = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFilePtr , 0);
+    int* B = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFilePtr , 0);
+    int* X = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFilePtr , 0);
+    int* Barrier = mmap(NULL, m*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFilePtr , 0);
+    int* processId = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFilePtr , 0);
+
+    //Initiialize Shared Memory
+    *processId = 0;
+    initBarrier(Barrier);
+
+    //Read in A.txt to shared A array
+    for (int i = 0; i < n; i++) 
+    {
+        fscanf(inputFilePtr, "%d", A[i]);
+    }
     fclose(inputFilePtr);
 
-    // Create worker processes
-    pid_t pid;
-
     int problemSize = n/m;
+    int numChildLoops = ceil(log(m)/log(2));
 
-    for (int i = 0; i < m; i++) {
+    for (int i = 0; i < numChildLoops; i++) 
+    {
         if (fork() == 0) // Child processes
         {
             /*
-            (i*problemSize) = beggining of sub problem for process m
-            (i*problemSize+problemSize) = end of sub problem for process m
+            (*processId)*problemSize) = beggining of sub problem for process m
+            (*processId)*problemSize+problemSize = end of sub problem for process m
             */
-            if(i+1==m) //Last Child Process recieves all extra elements in the case of unequal division of n/m
+            if(i+1==numChildLoops) //Last Child Process recieves all extra elements in the case of unequal division of n/m
                 {
-                    worker(i, (i*problemSize), n , shared, &barrier);
+                    worker(((*processId)*problemSize), n, *processId++);
                 }
                 else
                 {
-                    worker(i, (i*problemSize), (i*problemSize+problemSize) , shared, &barrier);
+                    worker(((*processId)*problemSize), ((*processId)*problemSize+problemSize),*processId++);
                 }
             exit(0);
         }
+        else { wait(NULL);}
     }
 
     // Update B array
