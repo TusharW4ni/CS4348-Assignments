@@ -18,41 +18,39 @@ B - output Array
 X - intermediate Array
 */ 
 
-
-void initBarrier( int* Barrier) 
-{
-    for(int i=0; i< (sizeof(Barrier)/sizeof(int)); i++)
-    {
+void initBarrier( int* Barrier, int n) {
+    for(int i=0; i< n; i++){
         Barrier[i]=-1;
-    }
-    
+    }  
 }
 
-void waitBarrier(int* barrier) {
-    barrier->count++;
-
-    if (barrier->count == barrier->n) {
-        barrier->count = 0;
-    } else {
-        while (barrier->count != 0) {
-            // Wait
+void checkBarrier(int i)
+{
+        for(int j=0; j< shared_m; j++)
+        {
+            if(Barrier[j]<i)
+            {
+                j=0; //Reset J to scan again;
+                wait(NULL);
+            }
         }
-    }
 }
 
 // Worker function
-void worker(int id, int begin, int end) {
-    int n = shared->n;
-    int m = shared->m;
-    int* A = shared->A;
-    int* B = shared->B;
-    int* X = shared->X;
+void worker(int begin, int end, int id) 
+{
+    //Kill extra processes if too many forked
+    if(id >= shared_m) {
+        kill(getpid(), SIGTERM);
+        }
 
-    for (int i = 0; i < ceil(log2(n)); i++) 
+    for (int i = 0; i < ceil(log2(shared_n)); i++) 
     {
-        int* Old = shared->X;
-        shared->X = malloc(n * sizeof(int));
-        for (int j = begin; begin < end; j++) {
+        int* Old = X;
+        X = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFilePtr , 0);
+        //shared->X = malloc(n * sizeof(int));
+        for (int j = begin; begin < end; j++) 
+        {
             if (j - pow(2, i) < 0) //The case where it does not have a left neighbor
             {
                 X[j] = Old[j];
@@ -60,20 +58,11 @@ void worker(int id, int begin, int end) {
                 X[j] = Old[j] + Old[j - (int)pow(2, i)];
             }
         }
-
-        waitBarrier(barrier);
-
-        waitBarrier(barrier);
+        //Update Barrier and Check to See other Process Statuses
+        Barrier[id]++;
+        checkBarrier(i);
     }
-
-    // Worker id 0 writes the result to the output file
-    if (id == 0) {
-        FILE* outputFile = fopen("B.txt", "w");
-        for (int j = 0; j < n; j++) {
-            fprintf(outputFile, "%d ", B[j]);
-        }
-        fclose(outputFile);
-    }
+ 
 }
 
 int main(int argc, char* argv[]) {
@@ -87,6 +76,8 @@ int main(int argc, char* argv[]) {
     char* inputFile = argv[3];
     char* outputFile = argv[4];
 
+    //Used to Identify child processes
+    int processId = 0;
 
     // Validate arguments (additional validation may be required)
     if (n <= 0 || m <= 0) {
@@ -98,7 +89,7 @@ int main(int argc, char* argv[]) {
     } 
     // We need to Validate n== # of elements in file
 
-     // Read input array from file
+    // Read input array from file
     FILE* inputFilePtr = fopen(inputFile, "r");
     if (inputFilePtr == NULL) {
         perror("Error opening input file");
@@ -108,22 +99,24 @@ int main(int argc, char* argv[]) {
     //SharedData* shared = mmap(NULL, sizeof(SharedData), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
 
     //Shared memory initialization
+    int* shared_n = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFilePtr , 0);
+    int* shared_m = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFilePtr , 0);
     int* A = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFilePtr , 0);
     int* B = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFilePtr , 0);
     int* X = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFilePtr , 0);
     int* Barrier = mmap(NULL, m*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFilePtr , 0);
-    int* processId = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFilePtr , 0);
+    //int* processId = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFilePtr , 0);
 
     //Initiialize Shared Memory
-    *processId = 0;
-    initBarrier(Barrier);
+    shared_n = n;
+    shared_m = m;
+    initBarrier(Barrier, n);
 
     //Read in A.txt to shared A array
     for (int i = 0; i < n; i++) 
     {
         fscanf(inputFilePtr, "%d", A[i]);
     }
-    fclose(inputFilePtr);
 
     int problemSize = n/m;
     int numChildLoops = ceil(log(m)/log(2));
@@ -133,16 +126,16 @@ int main(int argc, char* argv[]) {
         if (fork() == 0) // Child processes
         {
             /*
-            (*processId)*problemSize) = beggining of sub problem for process m
-            (*processId)*problemSize+problemSize = end of sub problem for process m
+            (processId)*problemSize) = beggining of sub problem for process m
+            (processId)*problemSize+problemSize = end of sub problem for process m
             */
             if(i+1==numChildLoops) //Last Child Process recieves all extra elements in the case of unequal division of n/m
                 {
-                    worker(((*processId)*problemSize), n, *processId++);
+                    worker((processId*problemSize), n, processId++);
                 }
                 else
                 {
-                    worker(((*processId)*problemSize), ((*processId)*problemSize+problemSize),*processId++);
+                    worker((processId*problemSize), ((processId*problemSize) + problemSize), processId++);
                 }
             exit(0);
         }
@@ -152,18 +145,42 @@ int main(int argc, char* argv[]) {
     while (wait(NULL) > 0);
 
     // Update B array
-        for (int j = 0; j < n; j++) {
+        for (int j = 0; j < n; j++) 
+        {
             B[j] = X[j];
         }
 
     //Write B to B.txt
+     FILE* outFile = fopen(outputFile, "w");
+        for (int j = 0; j < n; j++) {
+            fprintf(outFile, "%d ", B[j]);
+        }
+        fclose(outFile);
 
 
     // Clean up and release resources
-    free(A); //Use munmap instead
-    free(B);
-    free(X);
-    munmap(shared, sizeof(SharedData));
+    if(munmap(A, n*sizeof(int)) <0)  {
+        perror("Error dealloacating shared Memory: A");
+        return 1;
+    }
+
+    if(munmap(B, n*sizeof(int)) <0) {
+        perror("Error dealloacating shared Memory: B");
+        return 1;
+    }
+
+    if(munmap(X, n*sizeof(int)) <0) {
+        perror("Error dealloacating shared Memory: X");
+        return 1;
+    }
+
+    if(munmap(Barrier, n*sizeof(int)) <0) {
+        perror("Error dealloacating shared Memory: Barrier");
+        return 1;
+    }
+
+    //Close Input File (Must keep open to end so we can mmap using A.txt file descriptor)
+    fclose(inputFilePtr);
 
     return 0;
 }
