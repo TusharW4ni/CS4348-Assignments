@@ -2,152 +2,179 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/wait.h>
-#include <math.h>
-#include <sys/mman.h>
-#include <fcntl.h>
-#include <sys/stat.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <math.h> // For ceil function
 
-#define MAX_N 10000  // Adjust as needed
+#define BARRIER_FLAG 0
+#define TRUE 1
 
-//Test
-// Shared memory structure
-typedef struct {
-    int n;
-    int m;
-    int* A;
-    int* B;
-    int* X;
-} SharedData;
-
-// Barrier implementation
-typedef struct {
-    int count;
-    int n;
-} Barrier;
-
-void initBarrier(Barrier* barrier, int n) {
-    barrier->count = 0;
-    barrier->n = n;
-}
-
-void waitBarrier(Barrier* barrier) {
-    barrier->count++;
-
-    if (barrier->count == barrier->n) {
-        barrier->count = 0;
-    } else {
-        while (barrier->count != 0) {
-            // Wait
-        }
-    }
-}
-
-// Worker function
-void worker(int id, SharedData* shared, Barrier* barrier) {
-    int n = shared->n;
-    int m = shared->m;
-    int* A = shared->A;
-    int* B = shared->B;
-    int* X = shared->X;
-
-    for (int i = 0; i < log2(n); i++) {
-        for (int j = 0; j < n; j++) {
-            if (j < pow(2, i)) {
-                X[j] = B[j];
-            } else {
-                X[j] = B[j] + B[j - (int)pow(2, i)];
-            }
-        }
-
-        waitBarrier(barrier);
-
-        // Update B array
-        for (int j = 0; j < n; j++) {
-            B[j] = X[j];
-        }
-
-        waitBarrier(barrier);
-    }
-
-    // Worker id 0 writes the result to the output file
-    if (id == 0) {
-        FILE* outputFile = fopen("B.txt", "w");
-        for (int j = 0; j < n; j++) {
-            fprintf(outputFile, "%d ", B[j]);
-        }
-        fclose(outputFile);
-    }
-}
-
-int main(int argc, char* argv[]) {
-    if (argc != 5) {
-        fprintf(stderr, "Usage: %s <n> <m> <inputFile> <outputFile>\n", argv[0]);
-        return 1;
-    }
-
-    int n = atoi(argv[1]);
-    int m = atoi(argv[2]);
-    char* inputFile = argv[3];
-    char* outputFile = argv[4];
-
-    // Validate arguments (additional validation may be required)
-    if (n <= 0 || m <= 0) {
-        fprintf(stderr, "n or m can't be less than zero\n");
-        return 1;
-    } else if (m < n) {
-      fprintf(stderr, "m can't be less than n\n");
-      return 1;
-    } 
-
-   
-
-    //Shared memory initialization
-    //SharedData* shared = mmap(NULL, sizeof(SharedData), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
-    int fd = shm_open("/my_shared_memory", O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
-    ftruncate(fd, sizeof(SharedData));
-    SharedData* shared = mmap(NULL, sizeof(SharedData), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    shared->n = n;
-    shared->m = m;
-    shared->A = malloc(n * sizeof(int));
-    shared->B = malloc(n * sizeof(int));
-    shared->X = malloc(n * sizeof(int));
-
-    // Read input array from file
-    FILE* inputFilePtr = fopen(inputFile, "r");
-    if (inputFilePtr == NULL) {
-        perror("Error opening input file");
-        return 1;
-    }
-
-    for (int i = 0; i < n; i++) {
-        fscanf(inputFilePtr, "%d", &shared->A[i]);
-    }
-
-    fclose(inputFilePtr);
-
-    // Create worker processes
-    pid_t pid;
-    Barrier barrier;
-    initBarrier(&barrier, m);
-
-    for (int i = 0; i < m; i++) {
-        pid = fork();
-        if (pid == 0) {
-            // Child process
-            worker(i, shared, &barrier);
-            exit(0);
-        }
-    }
-
-    // Wait for all child processes to finish
-    while (wait(NULL) > 0);
-
-    // Clean up and release resources
-    free(shared->A);
-    free(shared->B);
-    free(shared->X);
-    munmap(shared, sizeof(SharedData));
-
+// Function to validate n and m
+int validate(int n, int m)
+{
+  if (n <= 0 || m <= 0)
+  {
+    printf("Error: n and m must be greater than zero.\n");
     return 0;
+  }
+  if (n <= m)
+  {
+    printf("Error: n must be greater than m.\n");
+    return 0;
+  }
+  return 1;
 }
 
+// Barrier implementation using shared memory
+void barrier(int *arr, int n, int m, int process_id)
+{
+  int i;
+  arr[process_id]++;
+  while (arr[process_id] != n)
+  {
+    // Wait until all processes reach the barrier
+  }
+  if (process_id == 0)
+  {
+    for (i = 0; i < m; i++)
+    {
+      arr[i] = BARRIER_FLAG;
+    }
+  }
+  while (arr[process_id] != BARRIER_FLAG)
+  {
+    // Wait until the barrier is reset
+  }
+}
+
+int main(int argc, char *argv[])
+{
+  // Validate command-line arguments
+  if (argc != 5)
+  {
+    printf("Usage: %s <n> <m> <A.txt> <B.txt>\n", argv[0]);
+    return 1;
+  }
+
+  // Parse n and m from command-line arguments
+  int n = atoi(argv[1]);
+  int m = atoi(argv[2]);
+
+  // Validate n and m
+  if (!validate(n, m))
+  {
+    return 1;
+  }
+
+  // Open A.txt for reading
+  FILE *file_A = fopen(argv[3], "r");
+  if (file_A == NULL)
+  {
+    printf("Error: Unable to open %s for reading.\n", argv[3]);
+    return 1;
+  }
+
+  // Round up the size of the array to the nearest multiple of the number of processes
+  // int array_size = (int)ceil((double)n / m) * m;
+  int array_size = n;
+
+  // Create/access shared memory for barrier
+  key_t barrier_key = ftok("barrier_key", 'R');
+  int barrier_shmid = shmget(barrier_key, m * sizeof(int), IPC_CREAT | 0666);
+  if (barrier_shmid == -1)
+  {
+    perror("73 shmget for barrier");
+    return 1;
+  }
+  int *barrier_arr = (int *)shmat(barrier_shmid, NULL, 0);
+  if (barrier_arr == (int *)(-1))
+  {
+    perror("shmat for barrier");
+    return 1;
+  }
+
+  // Create/access shared memory for array
+  key_t array_key = ftok("array_key", 'R');
+  int array_shmid = shmget(array_key, array_size * sizeof(int), IPC_CREAT | 0666);
+  if (array_shmid == -1)
+  {
+    perror("86 shmget for array");
+    printf("shmget error: %s\n", strerror(errno));
+    return 1;
+  }
+  int *array = (int *)shmat(array_shmid, NULL, 0);
+  if (array == (int *)(-1))
+  {
+    perror("shmat for array");
+    return 1;
+  }
+
+  // Initialize shared memory for array with zeros
+  for (int i = 0; i < array_size; i++)
+  {
+    array[i] = 0;
+  }
+
+  // Read integers from A.txt and store them in the shared array
+  int i = 0;
+  while (fscanf(file_A, "%d", &array[i]) != EOF && i < n)
+  {
+    i++;
+  }
+  fclose(file_A);
+
+  // Fork processes to perform parallel prefix sum
+  pid_t pid;
+  for (int process_id = 0; process_id < m; process_id++)
+  {
+    pid = fork();
+    if (pid == 0)
+    { // Child process
+      // Perform parallel prefix sum for this process
+      int start = process_id * (n / m);
+      int end = (process_id == m - 1) ? n : (process_id + 1) * (n / m);
+      for (int step = 1; step < n; step *= 2)
+      {
+        for (int j = start + step; j < end; j++)
+        {
+          array[j] += array[j - step];
+        }
+        barrier(barrier_arr, m, m, process_id);
+      }
+
+      // Output the array to B.txt
+      FILE *file_B = fopen(argv[4], "w");
+      if (file_B == NULL)
+      {
+        printf("Error: Unable to open %s for writing.\n", argv[4]);
+        return 1;
+      }
+      for (int j = 0; j < n; j++)
+      {
+        fprintf(file_B, "%d ", array[j]);
+      }
+      fclose(file_B);
+
+      exit(0);
+    }
+    else if (pid < 0)
+    {
+      perror("fork");
+      return 1;
+    }
+  }
+
+  // Wait for all child processes to finish
+  for (int i = 0; i < m; i++)
+  {
+    wait(NULL);
+  }
+
+  // Detach and remove shared memory segments
+  shmdt(barrier_arr);
+  shmdt(array);
+  shmctl(barrier_shmid, IPC_RMID, NULL);
+  shmctl(array_shmid, IPC_RMID, NULL);
+
+  return 0;
+}
