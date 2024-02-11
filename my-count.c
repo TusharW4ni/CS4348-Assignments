@@ -49,29 +49,27 @@ void waitBarrier(Barrier* barrier) {
 }
 
 // Worker function
-void worker(int begin, int end, SharedData* shared, Barrier* barrier) {
+void worker(int id, int begin, int end, SharedData* shared, Barrier* barrier) {
     int n = shared->n;
     int m = shared->m;
     int* A = shared->A;
     int* B = shared->B;
     int* X = shared->X;
 
-    for (int i = 0; i < floor(log2(n)); i++) {
+    for (int i = 0; i < ceil(log2(n)); i++) 
+    {
+        int* Old = shared->X;
+        shared->X = malloc(n * sizeof(int));
         for (int j = begin; begin < end; j++) {
             if (j - pow(2, i) < 0) //The case where it does not have a left neighbor
             {
-                X[j] = B[j];
+                X[j] = Old[j];
             } else {
-                X[j] = B[j] + B[j - (int)pow(2, i)];
+                X[j] = Old[j] + Old[j - (int)pow(2, i)];
             }
         }
 
         waitBarrier(barrier);
-
-        // Update B array
-        for (int j = 0; j < n; j++) {
-            B[j] = X[j];
-        }
 
         waitBarrier(barrier);
     }
@@ -97,6 +95,7 @@ int main(int argc, char* argv[]) {
     char* inputFile = argv[3];
     char* outputFile = argv[4];
 
+
     // Validate arguments (additional validation may be required)
     if (n <= 0 || m <= 0) {
         fprintf(stderr, "n or m can't be less than zero\n");
@@ -119,6 +118,10 @@ int main(int argc, char* argv[]) {
     shared->B = malloc(n * sizeof(int));
     shared->X = malloc(n * sizeof(int));
 
+    //Barrier Needs to be Shared as well so children can write to it
+    Barrier barrier;
+    initBarrier(&barrier, m);
+
     // Read input array from file
     FILE* inputFilePtr = fopen(inputFile, "r");
     if (inputFilePtr == NULL) {
@@ -134,14 +137,11 @@ int main(int argc, char* argv[]) {
 
     // Create worker processes
     pid_t pid;
-    Barrier barrier;
-    initBarrier(&barrier, m);
 
     int problemSize = n/m;
 
     for (int i = 0; i < m; i++) {
-        pid = fork();
-        if (pid == 0) // Child processes
+        if (fork() == 0) // Child processes
         {
             /*
             (i*problemSize) = beggining of sub problem for process m
@@ -149,15 +149,20 @@ int main(int argc, char* argv[]) {
             */
             if(i+1==m) //Last Child Process recieves all extra elements in the case of unequal division of n/m
                 {
-                    worker((i*problemSize), n , shared, &barrier);
+                    worker(i, (i*problemSize), n , shared, &barrier);
                 }
                 else
                 {
-                    worker((i*problemSize), (i*problemSize+problemSize) , shared, &barrier);
+                    worker(i, (i*problemSize), (i*problemSize+problemSize) , shared, &barrier);
                 }
             exit(0);
         }
     }
+
+    // Update B array
+        for (int j = 0; j < n; j++) {
+            B[j] = X[j];
+        }
 
     // Wait for all child processes to finish
     while (wait(NULL) > 0);
