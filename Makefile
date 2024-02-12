@@ -1,6 +1,6 @@
 SOURCES = $(wildcard *.c)
 EXECS = $(SOURCES:%.c=%)
-CFLAGS = -std=c99 -g -lpthread
+CFLAGS = -std=gnu99 -g -lpthread
 LDFLAGS = -lm
 CC=gcc
 
