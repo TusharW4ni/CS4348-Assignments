@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -24,9 +25,9 @@ void initBarrier( int* Barrier, int n) {
     }  
 }
 
-void checkBarrier(int i)
+void checkBarrier(int* Barrier, int i, int m)
 {
-        for(int j=0; j< shared_m; j++)
+        for(int j=0; j< m; j++)
         {
             if(Barrier[j]<i)
             {
@@ -37,14 +38,14 @@ void checkBarrier(int i)
 }
 
 // Worker function
-void worker(int begin, int end, int id) 
+void worker(int begin, int end, int id, int n, int m, int* Barrier, int* X) 
 {
     //Kill extra processes if too many forked
-    if(id >= shared_m) {
+    if(id >= m) {
         kill(getpid(), SIGTERM);
         }
 
-    for (int i = 0; i < ceil(log2(shared_n)); i++) 
+    for (int i = 0; i < ceil(log2(n)); i++) 
     {
         int* Old = X;
         X = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFilePtr , 0);
@@ -60,7 +61,7 @@ void worker(int begin, int end, int id)
         }
         //Update Barrier and Check to See other Process Statuses
         Barrier[id]++;
-        checkBarrier(i);
+        checkBarrier(Barrier, i, m);
     }
  
 }
@@ -101,8 +102,8 @@ int main(int argc, char* argv[]) {
     //SharedData* shared = mmap(NULL, sizeof(SharedData), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
 
     //Shared memory initialization
-    int* shared_n = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFD , 0);
-    int* shared_m = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFD , 0);
+    //int* shared_n = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFD , 0);
+    //int* shared_m = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFD , 0);
     int* A = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFD , 0);
     int* B = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFD , 0);
     int* X = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFD , 0);
@@ -111,8 +112,8 @@ int main(int argc, char* argv[]) {
     //int* processId = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFilePtr , 0);
 
     //Initiialize Shared Memory
-    *shared_n = n;
-    *shared_m = m;
+    //*shared_n = n;
+    //*shared_m = m;
     initBarrier(Barrier, n);
 
     //Read in A.txt to shared A array
@@ -132,13 +133,13 @@ int main(int argc, char* argv[]) {
             (processId)*problemSize) = beggining of sub problem for process m
             (processId)*problemSize+problemSize = end of sub problem for process m
             */
-            if(i+1==numChildLoops) //Last Child Process recieves all extra elements in the case of unequal division of n/m
+            if(processId+1==m) //Last Child Process recieves all extra elements in the case of unequal division of n/m
                 {
-                    worker((processId*problemSize), n, processId++);
+                    worker((processId*problemSize), n, processId++, n, m, Barrier, X);
                 }
                 else
                 {
-                    worker((processId*problemSize), ((processId*problemSize) + problemSize), processId++);
+                    worker((processId*problemSize), ((processId*problemSize) + problemSize), processId++, n, m, Barrier, X);
                 }
             exit(0);
         }
