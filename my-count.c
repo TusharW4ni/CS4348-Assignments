@@ -3,6 +3,7 @@
 #include <sys/mman.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <math.h>
 
 int validateInput(char *argv[], int n, int m, FILE *A) {
   if (n < 1 || m < 1) {
@@ -40,42 +41,79 @@ int validateInput(char *argv[], int n, int m, FILE *A) {
 }
 
 void wait_on_barrier(int *barrier, int index, int m) {
-  barrier[index] = 1;
+  int currIter = barrier[index];
+  int done = 0;
+  barrier[index] ++;
   while(1) {
     for(int i = 0; i < m; i++) {
-      if(barrier[i] == 0) {
+      if(barrier[i] == currIter) {
         break;
       }
+      // done = 1;
     }
-    break;
+    // // if (done) {
+    //   break;
+    // }
   }
-  barrier[index] = 0;
 }
 
 void prefix_sum(int *barrier_shmem, int *shmem, int n, int m) {
   int chunk_size = n/m;
+  printf("Chunk Size: %d\n", chunk_size);
 
-  for(int i = 0; i < m; i++) {
+  for(int i = 0; i < (((log(n))/(log(2)))+1); i++) {
+    printf("i: %d\n", i);
     if(fork() == 0) {
+      printf("---------\n");
       int start = i * chunk_size;
-      int end = start + chunk_size; 
+      printf("start: %d\n", start);
+      int end = start + chunk_size;
+      printf("end: %d\n", end);
       if(i == m-1) end = n;
 
       for(int j = start; j < end; j++) {
+        printf("---\n");
+        printf("j: %d\n", j);
         if(j > start) shmem[j] += shmem[j-1];
+        printf("shmem[j]: %d\n", shmem[j]);
+        printf("---\n");
       }
+      //print the array
+      for(int j = start; j < end; j++) {
+        printf("%d ", shmem[j]);
+      }
+      printf("\n");
+      printf("--------\n"); 
 
       wait_on_barrier(barrier_shmem, i, m);
 
       exit(0);
     } else {
+      // printf("------\n");
+      // printf("Parent Waiting\n");
+      // //print the array
+      // for(int j = 0; j < n; j++) {
+      //   printf("%d ", shmem[j]);
+      // }
+      // printf("\n");
+      // printf("------\n");
       wait(NULL);
     }
   }
 
+  printf("------\n");
+  printf("Final Array\n");
   for(int i = 1; i < m; i++) {
+    printf("shmem[chunk_size * i]: %d\n", shmem[chunk_size * i]);
+    printf("shmem[chunk_size * (i-1)]: %d\n", shmem[chunk_size * (i-1)]);
     shmem[chunk_size * i] += shmem[chunk_size * (i-1)]; 
   }
+  //print the array
+  for(int j = 0; j < n; j++) {
+    printf("%d ", shmem[j]);
+  }
+  printf("\n");
+  printf("------\n");
 }
 
 int main(int argc, char *argv[]) {
