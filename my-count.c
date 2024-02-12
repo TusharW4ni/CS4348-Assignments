@@ -135,11 +135,11 @@ int main(int argc, char* argv[]) {
             */
             if(processId+1==m) //Last Child Process recieves all extra elements in the case of unequal division of n/m
                 {
-                    worker((processId*problemSize), n, processId++, n, m, Barrier, X, inputFD);
+                    worker((processId*problemSize), n, processId++, n, m, Barrier, X);
                 }
                 else
                 {
-                    worker((processId*problemSize), ((processId*problemSize) + problemSize), processId++, n, m, Barrier, X, inputFD);
+                    worker((processId*problemSize), ((processId*problemSize) + problemSize), processId++, n, m, Barrier, X);
                 }
             exit(0);
         }
