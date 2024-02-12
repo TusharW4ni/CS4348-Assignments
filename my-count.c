@@ -39,7 +39,20 @@ int validateInput(char *argv[], int n, int m, FILE *A) {
   return 0;
 }
 
-void prefix_sum(int *shmem, int n, int m) {
+void wait_on_barrier(int *barrier, int index, int m) {
+  barrier[index] = 1;
+  while(1) {
+    for(int i = 0; i < m; i++) {
+      if(barrier[i] == 0) {
+        break;
+      }
+    }
+    break;
+  }
+  barrier[index] = 0;
+}
+
+void prefix_sum(int *barrier_shmem, int *shmem, int n, int m) {
   int chunk_size = n/m;
 
   for(int i = 0; i < m; i++) {
@@ -51,6 +64,8 @@ void prefix_sum(int *shmem, int n, int m) {
       for(int j = start; j < end; j++) {
         if(j > start) shmem[j] += shmem[j-1];
       }
+
+      wait_on_barrier(barrier_shmem, i, m);
 
       exit(0);
     } else {
@@ -86,6 +101,11 @@ int main(int argc, char *argv[]) {
   }
   printf("You entered: \nn = %d  \nm = %d  \nInput file = %s \nOutput file = %s\n", n, m, argv[3], argv[4]);
 
+  int barrier[m];
+  for (int i = 0; i < m; i++) {
+    barrier[i] = 0;
+  }
+
   int inputArr[n];
   for (int i = 0; i < n; i++) {
     fscanf(A, "%d", &inputArr[i]);
@@ -93,7 +113,8 @@ int main(int argc, char *argv[]) {
   fclose(A);
 
   int *shmem = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-  if (shmem == MAP_FAILED) {
+  int *barrier_shmem = mmap(NULL, m*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+  if (shmem == MAP_FAILED || barrier_shmem == MAP_FAILED) {
     printf("mmap failed\n");
     return 1;
   }
@@ -102,7 +123,7 @@ int main(int argc, char *argv[]) {
     shmem[i] = inputArr[i];
   }
 
-  prefix_sum(shmem, n, m);
+  prefix_sum(barrier_shmem, shmem, n, m);
 
   for (int i = 0; i < n; i++) {
     fprintf(B, "%d ", shmem[i]);
