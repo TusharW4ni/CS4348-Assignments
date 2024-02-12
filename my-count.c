@@ -1,4 +1,4 @@
-#define _POSIX_C_SOURCE 200809L
+#define _POSIX_C_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -48,7 +48,7 @@ void worker(int begin, int end, int id, int n, int m, int* Barrier, int* X)
     for (int i = 0; i < ceil(log2(n)); i++) 
     {
         int* Old = X;
-        X = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1 , 0);
+        X = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1 , 0);
         //shared->X = malloc(n * sizeof(int));
         for (int j = begin; begin < end; j++) 
         {
@@ -102,18 +102,18 @@ int main(int argc, char* argv[]) {
     //SharedData* shared = mmap(NULL, sizeof(SharedData), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
 
     //Shared memory initialization
-    int* shared_n = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1 , 0);
-    int* shared_m = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1 , 0);
-    int* A = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1 , 0);
-    int* B = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1 , 0);
-    int* X = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1 , 0);
-    int* Barrier = mmap(NULL, m*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON , -1 , 0);
+    int* shared_n = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1 , 0);
+    int* shared_m = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1 , 0);
+    int* A = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1 , 0);
+    int* B = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1 , 0);
+    int* X = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1 , 0);
+    int* Barrier = mmap(NULL, m*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS , -1 , 0);
 
     //int* processId = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFilePtr , 0);
 
     //Initiialize Shared Memory
-    //*shared_n = n;
-    //*shared_m = m;
+    *shared_n = n;
+    *shared_m = m;
     initBarrier(Barrier, n);
 
     //Read in A.txt to shared A array
