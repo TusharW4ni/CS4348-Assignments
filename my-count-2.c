@@ -6,21 +6,6 @@
 #include <math.h>
 #include <string.h>
 
-void waitOnBarrier(int *barrierShmem, int *counterShmem, int n) {
-  while (1) {
-    int ready = 1;
-    for (int i = 0; i < n; i++) {
-      if (barrierShmem[i] < *counterShmem) {
-        ready = 0;
-        break;
-      }
-    }
-    if (ready) {
-      break;
-    }
-  }
-}
-
 int main(int argc, char *argv[]) {
   int m = atoi(argv[1]);
   int n = atoi(argv[2]);
@@ -31,7 +16,6 @@ int main(int argc, char *argv[]) {
   int flags = MAP_SHARED | MAP_ANONYMOUS;
   int *inputShmem = mmap(NULL, n*sizeof(int), permissions, flags, -1, 0);
   int *outputShmem = mmap(NULL, n*sizeof(int), permissions, flags, -1, 0);
-  int *barrierShmem = mmap(NULL, m*sizeof(int), permissions, flags, -1, 0);
   int *counterShmem = mmap(NULL, sizeof(int), permissions, flags, -1, 0);
   counterShmem = 0;
   int *tempShmem;
@@ -40,9 +24,6 @@ int main(int argc, char *argv[]) {
     fscanf(inputFile, "%d", &inputShmem[i]);
   }
   fclose(inputFile);
-  for (int i = 0; i < m; i++) {
-    barrierShmem[i] = 0;
-  }
 
   for (int i = 0; i <= floor(log2(n)); i++) {
     for (int j = 0; j < n; j++) {
@@ -52,8 +33,6 @@ int main(int argc, char *argv[]) {
         } else {
           outputShmem[j] = inputShmem[j] + inputShmem[j - (int)pow(2, i)];
         }
-        barrierShmem[j]++;
-        waitOnBarrier(barrierShmem, counterShmem, n);
         exit(0);
       }
     }
@@ -72,5 +51,4 @@ int main(int argc, char *argv[]) {
 
   munmap(inputShmem, n*sizeof(int));
   munmap(outputShmem, n*sizeof(int));
-  munmap(barrierShmem, m*sizeof(int));
 }
