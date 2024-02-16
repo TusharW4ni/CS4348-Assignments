@@ -34,6 +34,7 @@ int main(int argc, char *argv[]) {
   int *barrierShmem = mmap(NULL, m*sizeof(int), permissions, flags, -1, 0);
   int *counterShmem = mmap(NULL, sizeof(int), permissions, flags, -1, 0);
   counterShmem = 0;
+  int *tempShmem;
 
   for (int i = 0; i < n; i++) {
     fscanf(inputFile, "%d", &inputShmem[i]);
@@ -56,18 +57,16 @@ int main(int argc, char *argv[]) {
         exit(0);
       }
     }
-    // Wait for all child processes to finish
     for (int j = 0; j < n; j++) {
       wait(NULL);
     }
-    // Copy the output back to the input for the next iteration
-    for (int j = 0; j < n; j++) {
-      inputShmem[j] = outputShmem[j];
-    }
+    tempShmem = inputShmem;
+    inputShmem = outputShmem;
+    outputShmem = tempShmem;
   }
 
   for (int i = 0; i < n; i++) {
-    fprintf(outputFile, "%d ", outputShmem[i]);
+    fprintf(outputFile, "%d ", inputShmem[i]);
   }
   fclose(outputFile);
 
