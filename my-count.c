@@ -61,7 +61,7 @@ void prefix_sum(int *barrier_shmem, int *shmem, int n, int m) {
   int chunk_size = n/m;
   printf("Chunk Size: %d\n", chunk_size);
 
-  for(int i = 0; i < (((log(n))/(log(2)))+1); i++) {
+  for(int i = 0; i < m; i++) {
     printf("i: %d\n", i);
     if(fork() == 0) {
       printf("---------\n");

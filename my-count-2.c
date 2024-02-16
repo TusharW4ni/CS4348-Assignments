@@ -6,80 +6,72 @@
 #include <math.h>
 #include <string.h>
 
-void performHillisAndSteele(int *input_shmem, int *barrier_shmem, int *intermediate_shmem, int id, int n, int m) {
-  int chunk_size = n / m;
-  int start = id * chunk_size;
-  int end = (id + 1) * chunk_size;
-  if (id == m - 1) { end = n; }
-  // Hillis and Steele algorithm
-  for (int i = 0; i <= log2(n); i++) {
-    for (int j = start; j < end; j++) {
-      if (j < pow(2, i)) {
-        intermediate_shmem[j] = input_shmem[j];
-      } else {
-        intermediate_shmem[j] = input_shmem[j] + input_shmem[j - (int)pow(2, i)];
+void waitOnBarrier(int *barrierShmem, int *counterShmem, int n) {
+  while (1) {
+    int ready = 1;
+    for (int i = 0; i < n; i++) {
+      if (barrierShmem[i] < *counterShmem) {
+        ready = 0;
+        break;
       }
     }
-    // Synchronize threads here if necessary
-    int current_barrier = barrier_shmem[id];
-    int done = 0;
-    barrier_shmem[id] = barrier_shmem[id] + 1;
-    while (1) {
-      for (int k = 0; k < m; k++) {
-        if (barrier_shmem[k] <= current_barrier) {
-          break;
-        } else {
-          done = 1;
-        }
-      }
-      if (done) break;
-    }
-    // Copy intermediate results back to input for next iteration
-    for (int j = start; j < end; j++) {
-      input_shmem[j] = intermediate_shmem[j];
+    if (ready) {
+      break;
     }
   }
 }
 
 int main(int argc, char *argv[]) {
-  //--------------------
-  int n = atoi(argv[1]); 
-  int m = atoi(argv[2]); 
-  FILE *A = fopen(argv[3], "r"); 
-  FILE *B = fopen(argv[4], "w");
-  //--------------------
-  int sizeOfInputArray = n*sizeof(int);
-  int sizeOfOutputArray = n*sizeof(int);
-  int sizeOfBarrier = m*sizeof(int);
-  int logValue = log2(n);
-  int sizeOfIntermediateArrays = (logValue*(n*sizeof(int)));
-  //--------------------
-  int sizeOfSharedMem = sizeOfInputArray + sizeOfOutputArray + sizeOfBarrier + sizeOfIntermediateArrays;
+  int m = atoi(argv[1]);
+  int n = atoi(argv[2]);
+  FILE *inputFile = fopen(argv[3], "r");
+  FILE *outputFile = fopen(argv[4], "w");
+
   int permissions = PROT_READ | PROT_WRITE;
   int flags = MAP_SHARED | MAP_ANONYMOUS;
-  int *shmem = mmap(NULL, sizeOfSharedMem, permissions, flags, -1, 0);
-  //--------------------
-  for (int i = 0; i < n; i++) { fscanf(A, "%d", &shmem[i]); } fclose(A);
-  for (int i = 0; i < m; i++) { shmem[sizeOfInputArray + i] = 0; }
-  //--------------------
+  int *inputShmem = mmap(NULL, n*sizeof(int), permissions, flags, -1, 0);
+  int *outputShmem = mmap(NULL, n*sizeof(int), permissions, flags, -1, 0);
+  int *barrierShmem = mmap(NULL, m*sizeof(int), permissions, flags, -1, 0);
+  int *counterShmem = mmap(NULL, sizeof(int), permissions, flags, -1, 0);
+  counterShmem = 0;
+
+  for (int i = 0; i < n; i++) {
+    fscanf(inputFile, "%d", &inputShmem[i]);
+  }
+  fclose(inputFile);
   for (int i = 0; i < m; i++) {
-    if (fork() > 0) {
-      continue;
-    } else {
-      int *input_shmem = shmem;
-      int *barrier_shmem = &shmem[sizeOfInputArray];
-      int *intermediate_shmem = &shmem[sizeOfInputArray + sizeOfBarrier];
-      int id = i;
-      performHillisAndSteele(input_shmem, barrier_shmem, intermediate_shmem, id, n, m);
-      break;
+    barrierShmem[i] = 0;
+  }
+
+  for (int i = 0; i <= floor(log2(n)); i++) {
+    for (int j = 0; j < n; j++) {
+      if (fork() == 0) {
+        if (j < pow(2, i)) {
+          outputShmem[j] = inputShmem[j];
+        } else {
+          outputShmem[j] = inputShmem[j] + inputShmem[j - (int)pow(2, i)];
+        }
+        barrierShmem[j]++;
+        waitOnBarrier(barrierShmem, counterShmem, n);
+        exit(0);
+      }
+    }
+    // Wait for all child processes to finish
+    for (int j = 0; j < n; j++) {
+      wait(NULL);
+    }
+    // Copy the output back to the input for the next iteration
+    for (int j = 0; j < n; j++) {
+      inputShmem[j] = outputShmem[j];
     }
   }
 
-  // Write output
-  for (int i = 0; i < n; i++) { fprintf(B, "%d ", shmem[i]); } fclose(B);
+  for (int i = 0; i < n; i++) {
+    fprintf(outputFile, "%d ", outputShmem[i]);
+  }
+  fclose(outputFile);
 
-  // Clear shared memory
-  munmap(shmem, sizeOfSharedMem);
-
-  return 0;
+  munmap(inputShmem, n*sizeof(int));
+  munmap(outputShmem, n*sizeof(int));
+  munmap(barrierShmem, m*sizeof(int));
 }

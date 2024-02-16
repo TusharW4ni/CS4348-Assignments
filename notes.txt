@@ -1,0 +1,1 @@
+to make a working barrier i will first prototype it to be able to print out child 1, child 2, ... child m.
