@@ -21,9 +21,9 @@ B - output Array
 X - intermediate Array
 */ 
 
-void initBarrier( int* Barrier, int n) 
+void initBarrier(int* Barrier, int m) 
 {
-    for(int i=0; i< n; i++)
+    for(int i= 0; i < m; i++)
     {
         Barrier[i]=-1;
     }  
@@ -53,10 +53,10 @@ void worker(int processId, int begin, int end, int m, int n, int* Barrier, int* 
         {
             if (j < pow(2, i)) //The case where it does not have a left neighbor
             {
-                X[(i+1*n) + j] = X[(i*n)+j];
+                X[((i+1)*n) + j] = X[(i*n)+j];
             } 
             else {
-                X[(i+1*n) + j] = X[(i*n)+j] + X[(i*n)+ (j - (int)pow(2, i)) ];
+                X[((i+1)*n) + j] = X[(i*n)+j] + X[(i*n)+ (j - (int)pow(2, i))];
             }
         }
         
@@ -66,7 +66,6 @@ void worker(int processId, int begin, int end, int m, int n, int* Barrier, int* 
     }
 
     exit(0);
- 
 }
 
 int main(int argc, char* argv[]) {
@@ -76,26 +75,27 @@ int main(int argc, char* argv[]) {
     }
 
     // Read in and validate arguments (additional validation may be required)
-    
     int n = atoi(argv[1]);
-     if (n <= 0) {
-        perror( "n can not be less than 1\n");
+    int m = atoi(argv[2]);
+    char* inputFile = argv[3];
+    char* outputFile = argv[4];
+
+    if (n <= 0) {
+        perror( "n can not be less than 1 \n");
         return 1; 
     }
-    int m = atoi(argv[2]);
+
     if (m <= 0) {
-      perror("m can not be less than 1\n");
+      perror("m can not be less than 1 \n");
       return 1;
     }
-    if (m > n) {
+    if (n < m) 
+    {
       perror("n can not be less than m\n");
       return 1;
     }
-    
-    // We need to Validate n== # of elements in file
 
-    char* inputFile = argv[3];
-    char* outputFile = argv[4];
+    // We need to Validate n == # of elements in file
 
     // Open input File A.txt
     FILE* inputFilePtr = fopen(inputFile, "r");
@@ -115,7 +115,6 @@ int main(int argc, char* argv[]) {
     if(inputFile.st_size != n) {
         perror("Number of elements in file does not equal n")
     }
-
     */
 
     int numIterations = ceil(log2(n));
@@ -131,14 +130,14 @@ int main(int argc, char* argv[]) {
     int* X = mmap(NULL, (numIterations+1)*n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS , -1 , 0);
     int* Barrier = mmap(NULL, m*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS , -1, 0);
 
-    //int* processId = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFilePtr , 0);
-
-    //Read in A.txt to shared A array and Initialize Barrier
+    //Read in A.txt to shared X array and Initialize Barrier
     for (int i = 0; i < n; i++) 
     {
-        fscanf(inputFilePtr, "%d", X[i]);
+        fscanf(inputFilePtr, "%d", &X[i]);
     }
-    initBarrier(Barrier, n);
+    fclose(inputFilePtr);
+
+    initBarrier(Barrier, m);
 
     int problemSize = n/m;
 
@@ -164,28 +163,24 @@ int main(int argc, char* argv[]) {
     // Wait for all child processes to finish
     while (wait(NULL) > 0);
 
-    //Write B to B.txt
-     FILE* outFile = fopen(outputFile, "w");
+    //Write X to B.txt
+    FILE* outFile = fopen(outputFile, "w");
     for (int j = 0; j < n; j++) 
     {
-        fprintf(outFile, "%d ", X[(numIterations)*n + j]);
+        fprintf(outFile, "%d ", X[(numIterations*n) + j]);
     }
     fclose(outFile);
 
     // Clean up and release resources
-
-    if(munmap(X, n*sizeof(int)) <0) {
+    if(munmap(X, (numIterations+1)*n*sizeof(int)) <0) {
         perror("Error dealloacating shared Memory: X");
         return 1;
     }
 
-    if(munmap(Barrier, n*sizeof(int)) <0) {
+    if(munmap(Barrier, m*sizeof(int)) <0) {
         perror("Error dealloacating shared Memory: Barrier");
         return 1;
     }
-
-    //Close Input File (Must keep open to end so we can mmap using A.txt file descriptor)
-    fclose(inputFilePtr);
 
     return 0;
 }
