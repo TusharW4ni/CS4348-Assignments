@@ -1,5 +1,5 @@
-#define _POSIX_C_SOURCE 200809L
-#define GNU_SOURCE
+//#define _POSIX_C_SOURCE 200809L
+//#define GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -8,6 +8,7 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+//#include <bits/mman.h>
 
 #define MAX_N 10000  // Adjust as needed
 
@@ -20,50 +21,51 @@ B - output Array
 X - intermediate Array
 */ 
 
-void initBarrier( int* Barrier, int n) {
-    for(int i=0; i< n; i++){
+void initBarrier( int* Barrier, int n) 
+{
+    for(int i=0; i< n; i++)
+    {
         Barrier[i]=-1;
     }  
 }
 
-void checkBarrier(int* Barrier, int i, int m)
+void waitBarrier(int* Barrier, int i, int m)
 {
-        for(int j=0; j< m; j++)
-        {
-            if(Barrier[j]<i)
-            {
-                j=0; //Reset J to scan again;
-                wait(NULL);
+    int incomplete = 1;
+    while(incomplete) {
+        incomplete = 0;
+        for(int j=0; j< m; j++) {
+            if(Barrier[j]<i) {
+                incomplete = 1;
             }
         }
+    }
 }
 
 // Worker function
-void worker(int begin, int end, int id, int n, int m, int* Barrier, int* X) 
+void worker(int processId, int begin, int end, int m, int n, int* Barrier, int* X) 
 {
-    //Kill extra processes if too many forked
-    if(id >= m) {
-        kill(getpid(), SIGTERM);
-        }
-
+    //i+1*n is accessing the new array
+    //i*n is accessing the previous array
     for (int i = 0; i < ceil(log2(n)); i++) 
     {
-        int* Old = X;
-        X = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS , -1 , 0);
-        //shared->X = malloc(n * sizeof(int));
         for (int j = begin; begin < end; j++) 
         {
-            if (j - pow(2, i) < 0) //The case where it does not have a left neighbor
+            if (j < pow(2, i)) //The case where it does not have a left neighbor
             {
-                X[j] = Old[j];
-            } else {
-                X[j] = Old[j] + Old[j - (int)pow(2, i)];
+                X[(i+1*n) + j] = X[(i*n)+j];
+            } 
+            else {
+                X[(i+1*n) + j] = X[(i*n)+j] + X[(i*n)+ (j - (int)pow(2, i)) ];
             }
         }
+        
         //Update Barrier and Check to See other Process Statuses
-        Barrier[id]++;
-        checkBarrier(Barrier, i, m);
+        Barrier[processId]++;
+        waitBarrier(Barrier, i, m);
     }
+
+    exit(0);
  
 }
 
@@ -73,106 +75,104 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Read in and validate arguments (additional validation may be required)
+    
     int n = atoi(argv[1]);
+     if (n <= 0) {
+        perror( "n can not be less than 1\n");
+        return 1; 
+    }
     int m = atoi(argv[2]);
+    if (m <= 0) {
+      perror("m can not be less than 1\n");
+      return 1;
+    }
+    if (m > n) {
+      perror("n can not be less than m\n");
+      return 1;
+    }
+    
+    // We need to Validate n== # of elements in file
+
     char* inputFile = argv[3];
     char* outputFile = argv[4];
 
-    //Used to Identify child processes
-    int processId = 0;
-
-    // Validate arguments (additional validation may be required)
-    if (n <= 0 || m <= 0) {
-        fprintf(stderr, "n or m can't be less than zero\n");
-        return 1;
-    } else if (m < n) {
-      fprintf(stderr, "m can't be less than n\n");
-      return 1;
-    } 
-    // We need to Validate n== # of elements in file
-
-    // Read input array from file
+    // Open input File A.txt
     FILE* inputFilePtr = fopen(inputFile, "r");
     if (inputFilePtr == NULL) {
         perror("Error opening input file");
         return 1;
     }
-    //Get File Descriptor from input File
-    //int inputFD = fileno(inputFilePtr);
 
-    //SharedData* shared = mmap(NULL, sizeof(SharedData), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
+    /*Get File Descriptor from input File
+    int inputFD = fileno(inputFilePtr);
+    struct stat inputFile;
 
-    //Shared memory initialization
-    int* shared_n = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1 , 0);
-    int* shared_m = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1 , 0);
-    int* A = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS , -1 , 0);
-    int* B = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS , -1 , 0);
-    int* X = mmap(NULL, n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS , -1 , 0);
+    if(fstat(inputFD, &inputFile) == -1){
+        perror("Could not get file size.\n");
+        return 1;
+    }
+    if(inputFile.st_size != n) {
+        perror("Number of elements in file does not equal n")
+    }
+
+    */
+
+    int numIterations = ceil(log2(n));
+
+    /*  Shared Memory Allocation
+    X contains all intermediate arrays and original input array allocated together
+        Indices Ranges:
+        A.txt = [0,n)
+        X1 = [n, 2n)
+        X1 = [2n, 3n)
+        etc...
+    */
+    int* X = mmap(NULL, (numIterations+1)*n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS , -1 , 0);
     int* Barrier = mmap(NULL, m*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS , -1, 0);
 
     //int* processId = mmap(NULL, sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED, inputFilePtr , 0);
 
-    //Initiialize Shared Memory
-    *shared_n = n;
-    *shared_m = m;
-    initBarrier(Barrier, n);
-
-    //Read in A.txt to shared A array
+    //Read in A.txt to shared A array and Initialize Barrier
     for (int i = 0; i < n; i++) 
     {
-        fscanf(inputFilePtr, "%d", A[i]);
+        fscanf(inputFilePtr, "%d", X[i]);
     }
+    initBarrier(Barrier, n);
 
     int problemSize = n/m;
-    int numChildLoops = ceil(log(m)/log(2));
 
-    for (int i = 0; i < numChildLoops; i++) 
+    for (int i = 0; i < m; i++) 
     {
         if (fork() == 0) // Child processes
         {
             /*
-            (processId)*problemSize) = beggining of sub problem for process m
-            (processId)*problemSize+problemSize = end of sub problem for process m
+            beggining of sub problem for process m = (i*problemSize)
+            end of sub problem for process m       = (i*problemSize) + problemSize
             */
-            if(processId+1==m) //Last Child Process recieves all extra elements in the case of unequal division of n/m
+            if(i+1==m) //Last Child Process recieves all extra elements in the case of unequal division of n/m
                 {
-                    worker((processId*problemSize), n, processId++, n, m, Barrier, X);
+                    worker(i, (i*problemSize), n , m , n , Barrier, X);
                 }
                 else
                 {
-                    worker((processId*problemSize), ((processId*problemSize) + problemSize), processId++, n, m, Barrier, X);
+                    worker(i, (i*problemSize), ((i*problemSize) + problemSize), m , n, Barrier, X);
                 }
-            exit(0);
         }
     }
 
     // Wait for all child processes to finish
     while (wait(NULL) > 0);
 
-    // Update B array
-        for (int j = 0; j < n; j++) 
-        {
-            B[j] = X[j];
-        }
-
     //Write B to B.txt
      FILE* outFile = fopen(outputFile, "w");
-        for (int j = 0; j < n; j++) {
-            fprintf(outFile, "%d ", B[j]);
-        }
-        fclose(outFile);
-
+    for (int j = 0; j < n; j++) 
+    {
+        fprintf(outFile, "%d ", X[(numIterations)*n + j]);
+    }
+    fclose(outFile);
 
     // Clean up and release resources
-    if(munmap(A, n*sizeof(int)) <0)  {
-        perror("Error dealloacating shared Memory: A");
-        return 1;
-    }
-
-    if(munmap(B, n*sizeof(int)) <0) {
-        perror("Error dealloacating shared Memory: B");
-        return 1;
-    }
 
     if(munmap(X, n*sizeof(int)) <0) {
         perror("Error dealloacating shared Memory: X");
