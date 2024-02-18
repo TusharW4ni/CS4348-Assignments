@@ -1,5 +1,3 @@
-//#define _POSIX_C_SOURCE 200809L
-//#define GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -8,10 +6,8 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <sys/stat.h>
-//#include <bits/mman.h>
 
 #define MAX_N 10000  // Adjust as needed
-
 
 /*Shared memory structure
 n = # of Elements
@@ -29,7 +25,7 @@ void initBarrier(int* Barrier, int m)
     }  
 }
 
-void waitBarrier(int* Barrier, int i, int m)
+void checkBarrier(int* Barrier, int i, int m)
 {
     int incomplete = 1;
     while(incomplete) {
@@ -60,9 +56,9 @@ void worker(int processId, int begin, int end, int m, int n, int* Barrier, int* 
                 X[((i+1)*n) + j] = X[(i*n)+j] + X[(i*n) + (j - (int)pow(2, i))];
             }
         }
-        //Update Barrier and Check to See other Process Statuses
+        //Update Barrier and Check other Process Statuses
         Barrier[processId]++;
-        waitBarrier(Barrier, i, m);
+        checkBarrier(Barrier, i, m);
     }
 
     exit(0);
@@ -74,7 +70,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Read in and validate arguments (additional validation may be required)
+    // Read in and validate arguments
     int n = atoi(argv[1]);
     int m = atoi(argv[2]);
     char* inputFile = argv[3];
@@ -84,7 +80,6 @@ int main(int argc, char* argv[]) {
         perror( "n can not be less than 1 \n");
         return 1; 
     }
-
     if (m <= 0) {
       perror("m can not be less than 1 \n");
       return 1;
@@ -96,7 +91,7 @@ int main(int argc, char* argv[]) {
     }
 
     // We need to Validate n == # of elements in file
-
+    
     // Open input File A.txt
     FILE* inputFilePtr = fopen(inputFile, "r");
     if (inputFilePtr == NULL) {
