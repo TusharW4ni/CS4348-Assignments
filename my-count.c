@@ -22,7 +22,7 @@ X - intermediate Array
 */ 
 
 void initBarrier(int* Barrier, int m) 
-{
+{  
     for(int i= 0; i < m; i++)
     {
         Barrier[i]=-1;
@@ -48,18 +48,18 @@ void worker(int processId, int begin, int end, int m, int n, int* Barrier, int* 
     //i+1*n is accessing the new array
     //i*n is accessing the previous array
     for (int i = 0; i < ceil(log2(n)); i++) 
-    {
-        for (int j = begin; begin < end; j++) 
+    {   
+        for (int j = begin; j < end; j++) 
         {
             if (j < pow(2, i)) //The case where it does not have a left neighbor
             {
                 X[((i+1)*n) + j] = X[(i*n)+j];
             } 
-            else {
-                X[((i+1)*n) + j] = X[(i*n)+j] + X[(i*n)+ (j - (int)pow(2, i))];
+            else 
+            {
+                X[((i+1)*n) + j] = X[(i*n)+j] + X[(i*n) + (j - (int)pow(2, i))];
             }
         }
-        
         //Update Barrier and Check to See other Process Statuses
         Barrier[processId]++;
         waitBarrier(Barrier, i, m);
@@ -140,7 +140,6 @@ int main(int argc, char* argv[]) {
     initBarrier(Barrier, m);
 
     int problemSize = n/m;
-
     for (int i = 0; i < m; i++) 
     {
         if (fork() == 0) // Child processes
@@ -165,7 +164,8 @@ int main(int argc, char* argv[]) {
 
     //Write X to B.txt
     FILE* outFile = fopen(outputFile, "w");
-    for (int j = 0; j < n; j++) 
+    int j = 0;
+    for (; j < n; j++) 
     {
         fprintf(outFile, "%d ", X[(numIterations*n) + j]);
     }
