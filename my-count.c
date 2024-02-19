@@ -6,23 +6,47 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <time.h>
 
-#define MAX_N 10000  // Adjust as needed
+#define MAX_N 10000
 
-/*Shared memory structure
-n = # of Elements
-m = # of Processors
-A - input Array
-B - output Array
-X - intermediate Array
-*/ 
+int validateInput(char *argv[], int n, int m, FILE *inputFile) 
+{
+  if (n < 1 || m < 1) {
+    printf("n and m must be greater than 0\n");
+    printf("Usage: %s <n> <m> <A.txt> <B.txt>\n", argv[0]);
+    return 1;
+  }
+  // if (n > 10000 || m > 10000) {
+  //   printf("n and m must be less than 10,000\n");
+  //   printf("Usage: %s <n> <m> <A.txt> <B.txt>\n", argv[0]);
+  //   return 1;
+  // }
+  if (n < m) {
+    printf("n (number of elements) must be greater than or equal to m (number of processes)\n");
+    printf("Usage: %s <n> <m> <A.txt> <B.txt>\n", argv[0]);
+    return 1;
+  }
+  int count = 0;
+  int temp;
+  while (fscanf(inputFile, "%d", &temp) == 1) {
+    count++;
+  }
+  rewind(inputFile);
+  if (n > count ) {
+    printf("n (number of elements) must be less than or equal to the number of elements in the input file\n");
+    printf("Usage: %s <n> <m> <A.txt> <B.txt>\n", argv[0]);
+    return 1;
+  }
+  return 0;
+}
 
-void initBarrier(int* Barrier, int m) 
-{  
+void initBarrier(int* Barrier, int m)
+{
     for(int i= 0; i < m; i++)
     {
         Barrier[i]=-1;
-    }  
+    }
 }
 
 void checkBarrier(int* Barrier, int i, int m)
@@ -38,8 +62,7 @@ void checkBarrier(int* Barrier, int i, int m)
     }
 }
 
-// Worker function
-void worker(int processId, int begin, int end, int m, int n, int* Barrier, int* X) 
+void worker(int processId, int begin, int end, int m, int n, int* Barrier, int* X)
 {
     //i+1*n is accessing the new array
     //i*n is accessing the previous array
@@ -65,63 +88,36 @@ void worker(int processId, int begin, int end, int m, int n, int* Barrier, int* 
 }
 
 int main(int argc, char* argv[]) {
-    if (argc != 5) {
-        fprintf(stderr, "Usage: %s <n> <m> <inputFile> <outputFile>\n", argv[0]);
+    clock_t start = clock();
+    if (argc != 5) 
+    {
+        printf("Usage: %s <n> <m> <A.txt> <B.txt>\n", argv[0]);
         return 1;
     }
 
-    // Read in and validate arguments
     int n = atoi(argv[1]);
     int m = atoi(argv[2]);
-    char* inputFile = argv[3];
-    char* outputFile = argv[4];
-
-    if (n <= 0) {
-        perror( "n can not be less than 1 \n");
-        return 1; 
-    }
-    if (m <= 0) {
-      perror("m can not be less than 1 \n");
-      return 1;
-    }
-    if (n < m) 
-    {
-      perror("n can not be less than m\n");
-      return 1;
-    }
-
-    // We need to Validate n == # of elements in file
-    
-    // Open input File A.txt
-    FILE* inputFilePtr = fopen(inputFile, "r");
-    if (inputFilePtr == NULL) {
-        perror("Error opening input file");
+    FILE* inputFilePtr = fopen(argv[3], "r");
+    FILE* outFile = fopen(argv[4], "r");
+    if (outFile) {
+        fclose(outFile);
+        outFile = fopen(argv[4], "w");
+    } else {
+        printf("Output file does not exist\n");
+        printf("Usage: %s <n> <m> <A.txt> <B.txt>\n", argv[0]);
+        return 1;
+    } if (inputFilePtr == NULL) {
+        printf("Input file does not exist\n");
+        printf("Usage: %s <n> <m> <A.txt> <B.txt>\n", argv[0]);
         return 1;
     }
 
-    /*Get File Descriptor from input File
-    int inputFD = fileno(inputFilePtr);
-    struct stat inputFile;
-
-    if(fstat(inputFD, &inputFile) == -1){
-        perror("Could not get file size.\n");
+    if (validateInput(argv, n, m, inputFilePtr) != 0) {
         return 1;
     }
-    if(inputFile.st_size != n) {
-        perror("Number of elements in file does not equal n")
-    }
-    */
+    printf("You entered: \nn = %d  \nm = %d  \nInput file = %s \nOutput file = %s\n", n, m, argv[3], argv[4]);
 
     int numIterations = ceil(log2(n));
-
-    /*  Shared Memory Allocation
-    X contains all intermediate arrays and original input array allocated together
-        Indices Ranges:
-        A.txt = [0,n)
-        X1 = [n, 2n)
-        X1 = [2n, 3n)
-        etc...
-    */
     int* X = mmap(NULL, (numIterations+1)*n*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS , -1 , 0);
     int* Barrier = mmap(NULL, m*sizeof(int), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS , -1, 0);
 
@@ -139,10 +135,6 @@ int main(int argc, char* argv[]) {
     {
         if (fork() == 0) // Child processes
         {
-            /*
-            beggining of sub problem for process m = (i*problemSize)
-            end of sub problem for process m       = (i*problemSize) + problemSize
-            */
             if(i+1==m) //Last Child Process recieves all extra elements in the case of unequal division of n/m
                 {
                     worker(i, (i*problemSize), n , m , n , Barrier, X);
@@ -158,11 +150,10 @@ int main(int argc, char* argv[]) {
     while (wait(NULL) > 0);
 
     //Write X to B.txt
-    FILE* outFile = fopen(outputFile, "w");
     int j = 0;
     for (; j < n; j++) 
     {
-        fprintf(outFile, "%d ", X[(numIterations*n) + j]);
+        fprintf(outFile, "%d\n", X[(numIterations*n) + j]);
     }
     fclose(outFile);
 
@@ -176,6 +167,11 @@ int main(int argc, char* argv[]) {
         perror("Error dealloacating shared Memory: Barrier");
         return 1;
     }
+
+    printf("Written to %s\n", argv[4]);
+
+    double elapsedTime = (double)(clock() - start);
+    printf("Elapsed time: %.2f seconds\n", elapsedTime);
 
     return 0;
 }
