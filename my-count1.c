@@ -9,14 +9,12 @@
 
 #define MAX_N 10000  // Adjust as needed
 
-/*Shared memory structure
-n = # of Elements
-m = # of Processors
-A - input Array
-B - output Array
-X - intermediate Array
-*/ 
+/*
+Initializes barrier with all -1
 
+int* Barrier - Barrier to initialize
+int m - size of Barrier
+*/
 void initBarrier(int* Barrier, int m) 
 {  
     for(int i= 0; i < m; i++)
@@ -25,6 +23,14 @@ void initBarrier(int* Barrier, int m)
     }  
 }
 
+/*
+Function that Worker Process Calls to check status of other Worker Processes
+Idles until all child processes are finished with the current iteration.
+
+int* Barrier - Barrier to check
+int i - current Iteration #
+int m - # of Worker Processes
+*/
 void checkBarrier(int* Barrier, int i, int m)
 {
     int incomplete = 1;
@@ -38,6 +44,13 @@ void checkBarrier(int* Barrier, int i, int m)
     }
 }
 
+/*
+Unused function 
+Purpose: Validates file has enough integers
+
+FILE* file - file we are validating
+int n - # of integers required in file
+*/
 int intCount(FILE* file, int n)
 {
 
@@ -53,15 +66,27 @@ int intCount(FILE* file, int n)
     }
   }
 
-  if(wordCount < n)
-  {
+  if(wordCount < n) {
     enoughIntegers = 1;
   }
 
   return enoughIntegers;
 }
 
-// Worker function
+/* 
+Worker function
+Computes a portion of the array's prefix sum based on the child's user defined process Id (0 to m).
+After completing current iterations, it checks the shared barrier via checkBarrier() function call.
+
+int processId - user defined processId (A value 0 to m)
+int begin - beggining of sub problem
+int end - end of sub problem
+int m - # of child processes
+int n - # of elements in input array
+int* Barrier - shared barrier
+int* X - input array and all intermediate arrays
+*/
+
 void worker(int processId, int begin, int end, int m, int n, int* Barrier, int* X) 
 {
     //i+1*n is accessing the new array
@@ -90,6 +115,17 @@ void worker(int processId, int begin, int end, int m, int n, int* Barrier, int* 
 
     exit(0);
 }
+
+/*
+Main Function
+1. Parses and validates arguments from argv[]
+2. Allocated Shared Memory X and Barrier
+3. Reads in input file to X
+4. Forks off m child processes
+5. Waits for children processes to finish
+6. Writes final array in X to output file
+7.Cleans up and deallocates shared memeory X and Barrier
+*/
 
 int main(int argc, char* argv[]) {
     if (argc != 5) {
@@ -125,13 +161,6 @@ int main(int argc, char* argv[]) {
         perror("Error opening input file");
         return 1;
     }
-    /*
-    if(intCount(inputFilePtr, n))
-    {
-        perror("Not ennough integers in the file");
-        return 1;
-    }
-    */
    
     int numIterations = ceil(log2(n));
 
