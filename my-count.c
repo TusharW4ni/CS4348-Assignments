@@ -170,7 +170,7 @@ int main(int argc, char* argv[]) {
 
     printf("Written to %s\n", argv[4]);
 
-    double elapsedTime = (double)(clock() - start);
+    double elapsedTime = (double)(clock() - start) / CLOCKS_PER_SEC;
     printf("Elapsed time: %.2f seconds\n", elapsedTime);
 
     return 0;
