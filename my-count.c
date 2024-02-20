@@ -17,11 +17,7 @@ int validateInput(char *argv[], int n, int m, FILE *inputFile)
     printf("Usage: %s <n> <m> <A.txt> <B.txt>\n", argv[0]);
     return 1;
   }
-  // if (n > 10000 || m > 10000) {
-  //   printf("n and m must be less than 10,000\n");
-  //   printf("Usage: %s <n> <m> <A.txt> <B.txt>\n", argv[0]);
-  //   return 1;
-  // }
+
   if (n < m) {
     printf("n (number of elements) must be greater than or equal to m (number of processes)\n");
     printf("Usage: %s <n> <m> <A.txt> <B.txt>\n", argv[0]);
