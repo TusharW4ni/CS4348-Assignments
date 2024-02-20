@@ -38,6 +38,29 @@ void checkBarrier(int* Barrier, int i, int m)
     }
 }
 
+int intCount(FILE* file, int n)
+{
+
+  int wordCount = 0;
+  int enoughIntegers = 0; //Assume we have enough integers in the file
+
+  // Read the file character by character.
+  char c;
+  while ((c = fgetc(file)) != EOF) {
+    // If the current character is a space or new line increment the word count.
+    if (c == ' ' || c == '\n') {
+      wordCount++;
+    }
+  }
+
+  if(wordCount < n)
+  {
+    enoughIntegers = 1;
+  }
+
+  return enoughIntegers;
+}
+
 // Worker function
 void worker(int processId, int begin, int end, int m, int n, int* Barrier, int* X) 
 {
@@ -45,15 +68,19 @@ void worker(int processId, int begin, int end, int m, int n, int* Barrier, int* 
     //i*n is accessing the previous array
     for (int i = 0; i < ceil(log2(n)); i++) 
     {   
+        int new = (i+1)*n;
+        int old = (i*n);
+        int shift = (int)pow(2, i);
+
         for (int j = begin; j < end; j++) 
         {
-            if (j < pow(2, i)) //The case where it does not have a left neighbor
+            if (j < shift) //The case where it does not have a left neighbor
             {
-                X[((i+1)*n) + j] = X[(i*n)+j];
+                X[new + j] = X[old +j];
             } 
             else 
             {
-                X[((i+1)*n) + j] = X[(i*n)+j] + X[(i*n) + (j - (int)pow(2, i))];
+                X[new + j] = X[old +j] + X[old + j - shift];
             }
         }
         //Update Barrier and Check other Process Statuses
@@ -98,20 +125,14 @@ int main(int argc, char* argv[]) {
         perror("Error opening input file");
         return 1;
     }
-
-    /*Get File Descriptor from input File
-    int inputFD = fileno(inputFilePtr);
-    struct stat inputFile;
-
-    if(fstat(inputFD, &inputFile) == -1){
-        perror("Could not get file size.\n");
+    /*
+    if(intCount(inputFilePtr, n))
+    {
+        perror("Not ennough integers in the file");
         return 1;
     }
-    if(inputFile.st_size != n) {
-        perror("Number of elements in file does not equal n")
-    }
     */
-
+   
     int numIterations = ceil(log2(n));
 
     /*  Shared Memory Allocation
@@ -140,8 +161,8 @@ int main(int argc, char* argv[]) {
         if (fork() == 0) // Child processes
         {
             /*
-            beggining of sub problem for process m = (i*problemSize)
-            end of sub problem for process m       = (i*problemSize) + problemSize
+            beggining of sub problem for process m = (i*problemSize) where i is the processID
+            end of sub problem for process m       = (i*problemSize) + problemSize where i is the processID
             */
             if(i+1==m) //Last Child Process recieves all extra elements in the case of unequal division of n/m
                 {
@@ -159,8 +180,8 @@ int main(int argc, char* argv[]) {
 
     //Write X to B.txt
     FILE* outFile = fopen(outputFile, "w");
-    int j = 0;
-    for (; j < n; j++) 
+    
+    for (int j = 0; j < n; j++) 
     {
         fprintf(outFile, "%d ", X[(numIterations*n) + j]);
     }
