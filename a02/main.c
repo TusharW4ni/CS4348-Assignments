@@ -6,46 +6,45 @@
 #include <stdbool.h>
 
 atomic_bool lockB = ATOMIC_VAR_INIT(false);
-atomic_int lock = 0;
+atomic_int lockF = 0;
 int counter = 0;
 int num_threads = 0;
+int sleepFor = 0;
 
-// typedef struct {
-//   int wantToEnter;
-//   int turn;
-// } PetersonsLock;
+typedef struct {
+    volatile bool flag[2];
+    volatile int victim;
+} PetersonsLock;
 
-// PetersonsLock tree[num_threads];
+PetersonsLock lockP;
 
-// void lock(int i) {
-//     int depth;
-//     for (depth = 0; depth < 5; depth++) {
-//         tree[i].wantToEnter = depth;
-//         tree[i].turn = i / (1 << (depth + 1));
-//         int j;
-//         for (j = 0; j < num_threads; j++) {
-//             if (j != i) {
-//                 while (tree[j].wantToEnter >= depth && tree[i].turn == j / (1 << (depth + 1)));
-//             }
-//         }
-//     }
-// }
+void peterson_lock(int thread_id) {
+    int other_thread = 1 - thread_id; // get the other thread's ID
+    lockP.flag[thread_id] = true; // show that this thread is interested in entering the critical section
+    lockP.victim = thread_id; // give priority to the other thread
+    while (lockP.flag[other_thread] && lockP.victim == thread_id); // wait until the other thread is not interested or it gives priority to this thread
+}
 
-// void* tt_critical_section(void* arg) {
-//   int thread_id = *(int*)arg;
+void peterson_unlock(int thread_id) {
+    lockP.flag[thread_id] = false; // show that this thread is not interested in entering the critical section
+}
 
-//   lock(thread_id);
-//   printf("TT: Thread %d is inside the critical section.\n", thread_id);
+void* peterson_critical_section(void* arg) {
+  int thread_id = *(int*)arg;
 
-//   for (int i = 0; i < 5; i++) {
-//     counter++;
-//     printf("TT: Thread %d incremented counter to: %d\n", thread_id, counter);
-//   }
+  peterson_lock(thread_id);
+  printf("Peterson: Thread %d is inside the critical section.\n", thread_id);
 
-//   unlock(thread_id);
+  for (int i = 0; i < 1; i++) {
+    counter++;
+    printf("Peterson: Thread %d incremented counter to: %d\n", thread_id, counter);
+  }
 
-//   return NULL;
-// }
+  peterson_unlock(thread_id);
+
+  return NULL;
+}
+
 
 void* tas_critical_section(void* arg) {
   int thread_id = *(int*)arg;
@@ -56,10 +55,11 @@ void* tas_critical_section(void* arg) {
   }
 
   printf("TAS: Thread %d is inside the critical section.\n", thread_id);
-
+  sleep(sleepFor);
   for (int i = 0; i < 1; i++) {
     counter++;
     printf("TAS: Thread %d incremented counter to: %d\n", thread_id, counter);
+    sleep(sleepFor);
   }
 
   // Exiting the critical section, release the lock
@@ -68,25 +68,42 @@ void* tas_critical_section(void* arg) {
   return NULL;
 }
 
+// void* fai_critical_section(void* arg) {
+//   int thread_id = *(int*)arg;
+
+//   while (atomic_fetch_add(&lock, 1)) {
+//     atomic_fetch_sub(&lock, 1);
+//   }
+
+//   printf("FAI: Thread %d is inside the critical section.\n", thread_id);
+//   sleep(sleepFor);
+//   for (int i = 0; i < 1; i++) {
+//     counter++;
+//     printf("FAI: Thread %d incremented counter to: %d\n", thread_id, counter);
+//     sleep(sleepFor);
+//   }
+
+//   atomic_fetch_sub(&lock, 1);
+
+//   return NULL;
+// }
+
 void* fai_critical_section(void* arg) {
   int thread_id = *(int*)arg;
 
-  // Try to acquire the lock using FAI
-  while (atomic_fetch_add(&lock, 1)) {
-    // If lock was already true, keep trying until it becomes false
-    atomic_fetch_sub(&lock, 1);
-    continue;
+  while (atomic_fetch_add(&lockF, 1)) {
+    atomic_fetch_sub(&lockF, 1);
   }
 
   printf("FAI: Thread %d is inside the critical section.\n", thread_id);
-
+  sleep(sleepFor);
   for (int i = 0; i < 1; i++) {
     counter++;
     printf("FAI: Thread %d incremented counter to: %d\n", thread_id, counter);
+    sleep(sleepFor);
   }
 
-  // Exiting the critical section, release the lock
-  atomic_fetch_sub(&lock, 1);
+  atomic_fetch_sub(&lockF, 1);
 
   return NULL;
 }
@@ -108,7 +125,7 @@ int main(int argc, char *argv[]) {
     thread_ids[i] = i;
     switch (algorithm_type) {
       case 0:
-        // pthread_create(&threads[i], NULL, tt_critical_section, &thread_ids[i]);
+        pthread_create(&threads[i], NULL, peterson_critical_section, &thread_ids[i]);
         break;
       case 1:
         pthread_create(&threads[i], NULL, tas_critical_section, &thread_ids[i]);
@@ -128,14 +145,13 @@ int main(int argc, char *argv[]) {
 
   if (algorithm_type == 0) {
     printf("Final counter value (TT): %d\n", counter);
-  }
-
-  if (algorithm_type == 1) {
+  } else if (algorithm_type == 1) {
     printf("Final counter value (TAS): %d\n", counter);
-  }
-
-  if (algorithm_type == 2) {
+  } else if (algorithm_type == 2) {
     printf("Final counter value (FAI): %d\n", counter);
+  } else {
+    fprintf(stderr, "Invalid algorithm type. Use 0 for TT, 1 for TAS, or 2 for FAI.\n");
+    return 1;
   }
 
   return 0;
