@@ -11,40 +11,6 @@ int counter = 0;
 int num_threads = 0;
 int sleepFor = 0;
 
-// typedef struct {
-//     volatile bool flag[2];
-//     volatile int victim;
-// } PetersonsLock;
-
-// PetersonsLock lockP;
-
-// void peterson_lock(int thread_id) {
-//     int other_thread = 1 - thread_id; // get the other thread's ID
-//     lockP.flag[thread_id] = true; // show that this thread is interested in entering the critical section
-//     lockP.victim = thread_id; // give priority to the other thread
-//     while (lockP.flag[other_thread] && lockP.victim == thread_id); // wait until the other thread is not interested or it gives priority to this thread
-// }
-
-// void peterson_unlock(int thread_id) {
-//     lockP.flag[thread_id] = false; // show that this thread is not interested in entering the critical section
-// }
-
-// void* peterson_critical_section(void* arg) {
-//   int thread_id = *(int*)arg;
-
-//   peterson_lock(thread_id);
-//   printf("Peterson: Thread %d is inside the critical section.\n", thread_id);
-
-//   for (int i = 0; i < 1; i++) {
-//     counter++;
-//     printf("Peterson: Thread %d incremented counter to: %d\n", thread_id, counter);
-//   }
-
-//   peterson_unlock(thread_id);
-
-//   return NULL;
-// }
-
 typedef struct {
   volatile bool flag[2];
   volatile int victim;
@@ -60,8 +26,10 @@ TournamentTree* tree;
 void peterson_lock(PetersonsLock* lock, int thread_id) {
   int other_thread = 1 - thread_id;
   lock->flag[thread_id] = true;
-  lock->victim = thread_id;
-  while (lock->flag[other_thread] && lock->victim == thread_id);
+  lock->victim = other_thread;
+  while (lock->flag[other_thread] && lock->victim != thread_id) {
+    sleep(0);
+  };
 }
 
 void peterson_unlock(PetersonsLock* lock, int thread_id) {
@@ -70,7 +38,7 @@ void peterson_unlock(PetersonsLock* lock, int thread_id) {
 
 void tt_lock(int thread_id) {
   for (int i = thread_id; i > 0; i /= 2) {
-    peterson_lock(&tree->nodes[i], thread_id % 2);
+    peterson_lock(&tree->nodes[i], i % 2);
   }
 }
 
@@ -80,15 +48,17 @@ void tt_unlock(int thread_id) {
   }
 }
 
+
 void* tt_critical_section(void* arg) {
   int thread_id = *(int*)arg;
 
   tt_lock(thread_id);
   printf("TT: Thread %d is inside the critical section.\n", thread_id);
-
+  sleep(sleepFor);
   for (int i = 0; i < 1; i++) {
     counter++;
     printf("TT: Thread %d incremented counter to: %d\n", thread_id, counter);
+    sleep(sleepFor);
   }
 
   tt_unlock(thread_id);
@@ -99,57 +69,36 @@ void* tt_critical_section(void* arg) {
 void* tas_critical_section(void* arg) {
   int thread_id = *(int*)arg;
 
-  // Try to acquire the lock using TAS
   while (atomic_exchange(&lockB, true)) {
-    // If lock was already true, keep trying until it becomes false
+    sleep(0);
   }
 
-  printf("TAS: Thread %d is inside the critical section.\n", thread_id);
+  // printf("TAS: Thread %d is inside the critical section.\n", thread_id);
   sleep(sleepFor);
   for (int i = 0; i < 1; i++) {
     counter++;
-    printf("TAS: Thread %d incremented counter to: %d\n", thread_id, counter);
+    // printf("TAS: Thread %d incremented counter to: %d\n", thread_id, counter);
     sleep(sleepFor);
   }
 
-  // Exiting the critical section, release the lock
   atomic_store(&lockB, false);
 
   return NULL;
 }
-
-// void* fai_critical_section(void* arg) {
-//   int thread_id = *(int*)arg;
-
-//   while (atomic_fetch_add(&lock, 1)) {
-//     atomic_fetch_sub(&lock, 1);
-//   }
-
-//   printf("FAI: Thread %d is inside the critical section.\n", thread_id);
-//   sleep(sleepFor);
-//   for (int i = 0; i < 1; i++) {
-//     counter++;
-//     printf("FAI: Thread %d incremented counter to: %d\n", thread_id, counter);
-//     sleep(sleepFor);
-//   }
-
-//   atomic_fetch_sub(&lock, 1);
-
-//   return NULL;
-// }
 
 void* fai_critical_section(void* arg) {
   int thread_id = *(int*)arg;
 
   while (atomic_fetch_add(&lockF, 1)) {
     atomic_fetch_sub(&lockF, 1);
+    sleep(0);
   }
 
-  printf("FAI: Thread %d is inside the critical section.\n", thread_id);
+  // printf("FAI: Thread %d is inside the critical section.\n", thread_id);
   sleep(sleepFor);
   for (int i = 0; i < 1; i++) {
     counter++;
-    printf("FAI: Thread %d incremented counter to: %d\n", thread_id, counter);
+    // printf("FAI: Thread %d incremented counter to: %d\n", thread_id, counter);
     sleep(sleepFor);
   }
 
@@ -168,23 +117,17 @@ int main(int argc, char *argv[]) {
   num_threads = atoi(argv[2]);
 
   tree = malloc(sizeof(TournamentTree));
-  tree->nodes = malloc(sizeof(PetersonsLock) * num_threads);
+  tree->nodes = malloc(sizeof(PetersonsLock) * (num_threads + 1));
   tree->num_threads = num_threads;
 
   pthread_t threads[num_threads];
   int thread_ids[num_threads];
 
-  // for (int i = 0; i < num_threads; i++) {
-  //   thread_ids[i] = i;
-  // }
-
   for (int i = 0; i < num_threads; ++i) {
-    // tree[i].wantToEnter = -1;
     thread_ids[i] = i;
     switch (algorithm_type) {
       case 0:
         pthread_create(&threads[i], NULL, tt_critical_section, &thread_ids[i]);
-        // pthread_create(&threads[i], NULL, peterson_critical_section, &thread_ids[i]);
         break;
       case 1:
         pthread_create(&threads[i], NULL, tas_critical_section, &thread_ids[i]);
