@@ -19,19 +19,17 @@ namespace synchronization
       // return;
    }
 
-   void barrier::arriveAndWait( void ) {
-      // Write your code here
-      sem_wait(&mutex);
-      count --;
-      sem_post(&mutex);
-      if (count == 0) {
-         for (int i = 0; i < count; i++) {
-            sem_post(&barrier_sem);
+   void barrier::arriveAndWait() {
+      sem_wait(&mutex); // lock the mutex
+      count--; // decrement the count
+      if (count == 0) { // if all threads have arrived
+         for (int i = 0; i < numberOfThreads; i++) {
+            sem_post(&barrier_sem); // signal all waiting threads
          }
+         count = numberOfThreads; // reset the count for reuse
       }
-      sem_wait(&barrier_sem);
-      sem_post(&barrier_sem);
-      return;
+      sem_post(&mutex); // unlock the mutex
+      sem_wait(&barrier_sem); // wait at the barrier
    }
 
 }
