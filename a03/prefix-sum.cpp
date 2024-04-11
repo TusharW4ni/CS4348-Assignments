@@ -11,7 +11,7 @@
 
 using namespace std;
 
-int sizeOfInput = 1000;
+int sizeOfInput = 1000;      
 int numberOfThreads = 8;
 int numberOfPhases = 0;
 

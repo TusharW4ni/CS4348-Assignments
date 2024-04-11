@@ -12,9 +12,6 @@ namespace synchronization
    class barrier {
    private:
       // Declare your variables here
-      int count;
-      sem_t mutex;
-      sem_t barrier_sem;
 
    public:
 
