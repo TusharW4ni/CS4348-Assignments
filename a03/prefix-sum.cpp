@@ -63,7 +63,7 @@ void doWork( int myid ) {
       fixed = 2*fixed;
 
       // Wait until all threads have completed their work before moving to the next phase
-      rendevousz->arriveAndWait( );
+      rendevousz->arriveAndWait(numberOfThreads);
    }
  
    return;
@@ -142,25 +142,25 @@ int main( int argc, char** argv )
    
    // Cleanup: deallocate all dyamically allocated objects
 
-   for(int i = 0; i < numberOfThreads; ++i)
-   {
+   //for(int i = 0; i < numberOfThreads; ++i)
+   //{
       delete[] workers;
-      workers = NULL;
+      workers = nullptr;
 
-   }
+   //}
 
    for(int i = 0; i < numberOfPhases+1; ++i)
    {
       delete[] data[i];
-      data[i] = NULL;
+      data[i] = nullptr;
 
    }
 
    delete data;
-   data = NULL;
+   data = nullptr;
 
    delete rendevousz;
-   rendevousz = NULL;
+   rendevousz = nullptr;
 
    return 0;
 }
