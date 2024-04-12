@@ -1,21 +1,17 @@
 #ifndef BARRIER_H
 #define BARRIER_H
 
-
 #include <semaphore.h>
 
 namespace synchronization
 {
-
-
    // Provides a reusable barrier
    class barrier {
    private:
-      // Declare your variables here
-      sem_t mutex;
-      sem_t gate1;
-      sem_t gate2;
-      int count;
+      sem_t mutex; // Semaphore to guard the count
+      sem_t gate1; // Semaphore to block threads initially
+      sem_t gate2; // Semaphore to allow one thread to pass initially
+      int count;   // Count of threads that have arrived at the barrier
 
    public:
 
