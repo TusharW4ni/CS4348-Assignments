@@ -53,11 +53,11 @@ void* tt_critical_section(void* arg) {
   int thread_id = *(int*)arg;
 
   tt_lock(thread_id);
-  printf("TT: Thread %d is inside the critical section.\n", thread_id);
+  // printf("TT: Thread %d is inside the critical section.\n", thread_id);
   sleep(sleepFor);
   for (int i = 0; i < 1; i++) {
     counter++;
-    printf("TT: Thread %d incremented counter to: %d\n", thread_id, counter);
+    // printf("TT: Thread %d incremented counter to: %d\n", thread_id, counter);
     sleep(sleepFor);
   }
 
